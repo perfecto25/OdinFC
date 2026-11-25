@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"side_kick"
+display_name = "Side Kick"
+animation = &"side_kick"
+zone = 1
+strike_type = 1
+startup = 12
+active = 4
+recovery = 20
+hit_stun = 19
+damage = 8.0
+stamina_cost = 10.0
+reach = 1.9
+guard_break = 0.5
+parryable = false

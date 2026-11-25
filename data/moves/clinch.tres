@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"clinch"
+display_name = "Clinch"
+animation = &"clinch"
+zone = 1
+strike_type = 0
+action = 1
+startup = 6
+active = 4
+recovery = 18
+damage = 0.0
+stamina_cost = 4.0
+reach = 1.1
+parryable = false
+hit_bone = &"hands"

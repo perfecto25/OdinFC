@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rear_hook"
+display_name = "Rear Hook"
+animation = &"rear_hook"
+zone = 0
+strike_type = 0
+startup = 10
+active = 3
+recovery = 15
+hit_stun = 16
+damage = 9.0
+stamina_cost = 9.0
+reach = 1.25
+guard_break = 0.2
+parryable = true

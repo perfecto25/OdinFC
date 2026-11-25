@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"round_kick_high"
+display_name = "High Kick"
+animation = &"round_kick_high"
+zone = 0
+strike_type = 1
+startup = 13
+active = 4
+recovery = 26
+hit_stun = 24
+damage = 12.0
+stamina_cost = 13.0
+reach = 1.7
+guard_break = 0.5
+parryable = false

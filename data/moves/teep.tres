@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"teep"
+display_name = "Teep"
+animation = &"teep"
+zone = 1
+strike_type = 3
+startup = 10
+active = 4
+recovery = 16
+hit_stun = 16
+damage = 4.0
+stamina_cost = 7.0
+reach = 1.9
+guard_break = 0.5
+parryable = true

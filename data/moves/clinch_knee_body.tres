@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"clinch_knee_body"
+display_name = "Plum Knee (body)"
+animation = &"clinch_knee_body"
+zone = 1
+strike_type = 2
+startup = 9
+active = 1
+recovery = 12
+damage = 8.0
+stamina_cost = 7.0
+reach = 1.0
+guard_break = 0.3
+parryable = false
+hit_bone = &"knee"
