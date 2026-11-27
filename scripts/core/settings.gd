@@ -26,8 +26,10 @@ func load_settings() -> void:
 	hit_stop = cf.get_value("feel", "hit_stop", hit_stop)
 	fullscreen = cf.get_value("video", "fullscreen", fullscreen)
 	var m = cf.get_value("controls", "pad_layout", null)
-	if m is Dictionary and PadLayout.is_valid(m):
-		pad_layout = m
+	if m is Dictionary:
+		m = PadLayout.upgrade(m)
+		if PadLayout.is_valid(m):
+			pad_layout = m
 
 func save() -> void:
 	var cf := ConfigFile.new()

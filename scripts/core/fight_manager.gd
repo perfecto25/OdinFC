@@ -2,7 +2,11 @@ class_name FightManager
 extends Node3D
 ## Builds the arena (ring or cage), two fighters, camera and HUD, then drives FightFlow at 60 Hz.
 
-const HELP := "WASD move | J jab  K cross  U lead hook  I rear hook  O uppercut | L teep  ; side kick  H round kick (W=high, S=low)  N knee\nSpace guard (tap = parry)  Q slip (+A/D side)  E check  C clinch | in clinch: L or walk away = escape  C pummel  N knee (+W head)  H sweep  Space frame\nEsc pause | Tab camera | F1 opponent: %s | F2 end round (debug) | F3 arena: %s | F4 hide help | F5 debug labels\nPad: D-pad move | face = punches, L+face = kicks/knee, R = guard (tap = parry), R+face = uppercut/check/slip/clinch | Start pause, Select camera (Settings > Controller to rebind)"
+const HELP := "W forward  S back  A/D sidestep (double-tap W = superman punch, S = leap back) | J jab  K cross  U lead hook  I rear hook  O uppercut\nL teep  ; side kick  Y high kick  H round kick (hold W = high, S = low)  N knee\nSpace guard (tap = parry)  Q slip (+A/D side)  E check  C clinch | in clinch: L or walk away = escape  C pummel  N knee (+W head)  H sweep  Space frame\nEsc pause | Backspace freeze frame | Tab camera | F1 opponent: %s | F2 end round (debug) | F3 arena: %s | F4 hide help | F5 debug labels\nPad: D-pad move (double-tap Up/Down = lunge), R guard, Start pause, Select camera\n%s"
+const CPU_FOOT_SPEED := 0.9  ## the opponent's footwork, relative to its fighter's own speed
+## Moves the player's fighter throws twice as fast. Not the CPU: given a half-length uppercut it threw
+## little else (about 120 a fight instead of 13).
+const PLAYER_FAST_MOVES: Array[StringName] = [&"uppercut"]
 ## F1 cycles through these: the CPU fighter's own rating, the three AI levels, then the training-dummy modes.
 const OPPONENTS := ["AI Fighter rating", "AI Easy", "AI Medium", "AI Hard", "Dummy IDLE", "Dummy GUARD", "Dummy PARRY_SPAM",
 		"Dummy JAB_SPAM", "Dummy CHECK", "Dummy CLINCHER"]
@@ -11,6 +15,7 @@ var flow: FightFlow
 var _dummy: DummyController
 var _ai: AIController
 var _cpu: Fighter
+var _player: PlayerController
 var _opponent := 1
 var _seed := 0
 var _hud: FightHud
@@ -31,9 +36,13 @@ func _ready() -> void:
 	fb.opponent = fa
 	var pc := PlayerController.new()
 	add_child(pc)
-	pc.pad_layout = Settings.pad_layout
+	_player = pc
+	pc.me = fa
 	fa.controller = pc
 	_cpu = fb
+	fb.foot_speed *= CPU_FOOT_SPEED
+	for id in PLAYER_FAST_MOVES:
+		fa.double_move_speed(id)
 	_dummy = DummyController.new()
 	_dummy.me = fb
 	add_child(_dummy)
@@ -59,6 +68,7 @@ func _ready() -> void:
 	Sfx.set_crowd(true)
 	_pause = PauseMenu.new()
 	add_child(_pause)
+	add_child(FreezeFrame.new())
 
 	var cam := FightCamera.new()
 	_cam = cam
@@ -79,7 +89,9 @@ func _physics_process(_delta: float) -> void:
 		_hitstop -= 1
 	else:
 		flow.tick()
-	_hud.help_text = HELP % [OPPONENTS[_opponent], GameState.arena]
+	_player.pad_layout = Settings.pad_layout  # it can be rebound from the pause menu
+	_hud.help_text = HELP % [OPPONENTS[_opponent], GameState.arena,
+			PadLayout.help(Settings.pad_layout, PadLayout.connected_names())]
 
 func _unhandled_input(event: InputEvent) -> void:
 	var pad_skip: bool = event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_A \

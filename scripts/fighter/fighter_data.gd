@@ -31,7 +31,15 @@ const CLINCH_SWING := 0.25
 @export var fighting_out_of := ""   ## e.g. "Surin, Thailand"
 @export var record := ""             ## e.g. "240-24-14"
 @export var ranking := 0             ## roster ranking (1 = top); 0 = unranked
+@export var age := 0                 ## years; 0 = unknown
+@export var weight_class := ""       ## e.g. "Lightweight"; setting it gives the fighter a pre-fight page
 @export_multiline var bio := ""
+
+# --- model ---
+## Own character scene made by tools/import_fighter.gd; empty = the tinted stock mannequin.
+@export_file("*.scn") var model_path := ""
+## Stance and technique clips in assets/anim/generated/<anim_set>/ replacing the shared ones, e.g. "muay_thai".
+@export var anim_set := ""
 
 # --- body ---
 @export var height_cm := BASE_HEIGHT_CM
@@ -118,6 +126,17 @@ func build_moves(base: Dictionary) -> Dictionary:
 		m.reach *= reach_factor()
 		out[mid] = m
 	return out
+
+func has_profile() -> bool:
+	return weight_class != ""
+
+func weight_lbs() -> float:
+	return weight_kg / 0.45359237
+
+## e.g. 5'10"
+func height_ft_in() -> String:
+	var inches := roundi(height_cm / 2.54)
+	return "%d'%d\"" % [floori(inches / 12.0), inches % 12]
 
 ## e.g. "175 cm · 72 kg · Orthodox"
 func tale_of_the_tape() -> String:

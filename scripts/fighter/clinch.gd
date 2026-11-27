@@ -150,7 +150,7 @@ func _start_intent(i: int) -> void:
 				return  # no room to knee when you're being controlled
 			var key := &"clinch_knee"
 			if pos == Pos.DOMINANT:
-				key = &"clinch_knee_head" if f.get_move_input().y < -0.5 else &"clinch_knee_body"
+				key = &"clinch_knee_head" if _pushing(i) > 0.5 else &"clinch_knee_body"
 			var m: MoveData = f.moves[key]
 			_begin(i, &"knee", m.total_frames(), m.stamina_cost, m)
 			f.attack_started.emit(f, m)
@@ -166,11 +166,12 @@ func _start_intent(i: int) -> void:
 ## Fighter i is holding a direction pointing away from the other fighter.
 func walking_away(i: int) -> bool:
 	var mv := fighters[i].get_move_input()
-	if mv.length() < 0.5:
-		return false
+	return mv.length() >= 0.5 and _pushing(i) / mv.length() < -0.5
+
+## How far fighter i's held direction points at the other fighter (+1 = straight forward, -1 = straight back).
+func _pushing(i: int) -> float:
 	var d := fighters[1 - i].global_position - fighters[i].global_position
-	var to := Vector2(d.x, d.z)
-	return to.length() > 0.001 and mv.normalized().dot(to.normalized()) < -0.5
+	return fighters[i].get_move_input().dot(Vector2(d.x, d.z).normalized())
 
 func _begin(i: int, id: StringName, length: int, cost: float, m: MoveData = null) -> void:
 	_act[i] = {"id": id, "frame": 0, "len": length, "move": m}

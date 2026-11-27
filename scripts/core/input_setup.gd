@@ -5,10 +5,11 @@ const KEYS := {
 	"move_left": KEY_A, "move_right": KEY_D, "move_up": KEY_W, "move_down": KEY_S,
 	"jab": KEY_J, "cross": KEY_K, "lead_hook": KEY_U, "rear_hook": KEY_I,
 	"uppercut": KEY_O, "teep": KEY_L, "side_kick": KEY_SEMICOLON,
-	"round_kick": KEY_H, "knee": KEY_N, "guard": KEY_SPACE,
+	"round_kick": KEY_H, "round_kick_high": KEY_Y, "knee": KEY_N, "guard": KEY_SPACE,
 	"camera_toggle": KEY_TAB, "dummy_cycle": KEY_F1,
 	"skip": KEY_ENTER, "clinch": KEY_C, "check": KEY_E, "slip": KEY_Q, "debug_end_round": KEY_F2,
 	"arena_cycle": KEY_F3, "help_toggle": KEY_F4, "debug_labels": KEY_F5, "pause": KEY_ESCAPE,
+	"freeze_frame": KEY_BACKSPACE,
 }
 ## Gamepad bindings: movement (D-pad + left stick), pause, camera. Strikes/guard are face-button slots
 ## handled by PlayerController via PadLayout.

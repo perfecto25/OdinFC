@@ -303,7 +303,7 @@ func _defend(o: Dictionary) -> StringName:
 	var live := me.opponent
 	if live.state != Fighter.State.ATTACK or live.attack_phase() == &"recovery":
 		return &""  # it's over (we just haven't "seen" it yet: harmless either way)
-	if o.dist > m.reach + 0.35:
+	if o.dist > m.reach + maxf(m.travel, 0.0) + 0.35:
 		return &""  # out of range when they started: let it whiff
 	if o.attack_id != _threat_id:
 		_threat_id = o.attack_id
@@ -685,7 +685,7 @@ func _think_clinch() -> StringName:
 				return &"round_kick_body"  # sweep
 			if r < 0.75 * profile.knee_bias:
 				if opp.body.ratio(MoveData.Zone.HEAD) < opp.body.ratio(MoveData.Zone.BODY) or rng.randf() < 0.35:
-					_move = Vector2(0, -1)  # W held: plum knee to the head
+					_move = _to_opponent()  # holding forward: plum knee to the head
 				return &"knee"
 			return &"clinch"  # pummel to keep position
 		Clinch.Pos.NEUTRAL:

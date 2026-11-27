@@ -4,7 +4,7 @@ extends Resource
 
 enum Zone { HEAD, BODY, LEGS }
 enum StrikeType { PUNCH, KICK, KNEE, TEEP }  ## elbows later
-enum Action { STRIKE, CLINCH_ENTRY }
+enum Action { STRIKE, CLINCH_ENTRY, DASH }
 
 @export var id: StringName
 @export var display_name := ""
@@ -12,7 +12,8 @@ enum Action { STRIKE, CLINCH_ENTRY }
 @export var hit_bone: StringName = &"fist" ## BoneAttachment3D that carries the hitbox (milestone 6a)
 @export var zone: Zone = Zone.HEAD
 @export var strike_type: StrikeType = StrikeType.PUNCH  ## drives scoring weight + leg-damage weakening
-@export var action: Action = Action.STRIKE                ## CLINCH_ENTRY ties up instead of striking
+@export var action: Action = Action.STRIKE                ## CLINCH_ENTRY ties up, DASH only moves
+@export var travel := 0.0                  ## metres driven toward the opponent during startup + active (< 0 = away)
 @export var startup := 6                   ## frames before the hit can connect
 @export var active := 3                    ## frames the hit can connect
 @export var recovery := 10                 ## frames of vulnerability afterwards

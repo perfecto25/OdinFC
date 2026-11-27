@@ -45,8 +45,18 @@ func _build_environment() -> void:
 	e.background_color = Color(0.01, 0.012, 0.02)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = Color(0.22, 0.24, 0.32)
-	e.ambient_light_energy = 0.6
-	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	e.ambient_light_energy = 0.45
+	e.tonemap_mode = Environment.TONE_MAPPER_ACES
+	e.tonemap_exposure = 0.95
+	e.tonemap_white = 1.4
+	e.adjustment_enabled = true
+	e.adjustment_saturation = 0.92
+	# Contact shadows in the creases: under the chin, between arm and ribs, around the muscles.
+	e.ssao_enabled = true
+	e.ssao_radius = 0.18
+	e.ssao_intensity = 3.0
+	e.ssao_power = 1.4
+	e.ssao_light_affect = 0.35
 	e.glow_enabled = true
 	e.glow_intensity = 0.3
 	e.glow_bloom = 0.0
@@ -54,23 +64,37 @@ func _build_environment() -> void:
 	we.environment = e
 	add_child(we)
 
-## Broadcast rig: one shadowed key light straight down-ish on the canvas plus four unshadowed spots
-## from the truss corners. Only the key casts shadows, to keep the iGPU cost low.
+## Broadcast rig: a shadowed key light coming in at an angle (so bodies model and cast shadows), a cooler
+## rim light from the far side without shadows, and four spots from the truss corners; two diagonal spots
+## also cast shadows.
 func _build_lights() -> void:
 	var key := DirectionalLight3D.new()
-	key.rotation_degrees = Vector3(-72, 25, 0)
-	key.light_energy = 0.4
+	key.rotation_degrees = Vector3(-40, 40, 0)
+	key.light_energy = 1.0
+	key.light_color = Color(1.0, 0.95, 0.88)
 	key.shadow_enabled = true
-	key.directional_shadow_max_distance = 25.0
+	key.shadow_blur = 1.5
+	key.shadow_normal_bias = 2.5
+	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	key.directional_shadow_max_distance = 22.0
 	add_child(key)
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(-22, 215, 0)
+	rim.light_energy = 0.65
+	rim.light_color = Color(0.7, 0.8, 1.0)
+	add_child(rim)
 	for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
 		var s := SpotLight3D.new()
-		s.position = Vector3(c.x * 4.5, 7.5, c.y * 4.5)
-		s.light_energy = 3.0
+		s.position = Vector3(c.x * 4.5, 7.0, c.y * 4.5)
+		s.light_energy = 0.95
 		s.light_color = Color(1.0, 0.97, 0.92)
 		s.spot_range = 14.0
 		s.spot_angle = 32.0
 		s.spot_attenuation = 0.6
+		s.shadow_enabled = c.x == c.y
+		s.shadow_blur = 2.0
+		s.shadow_opacity = 0.7
+		s.shadow_normal_bias = 2.0
 		add_child(s)
 		s.look_at(Vector3(0, 0, 0))
 	# The lighting truss hanging over the canvas (it frames the wide shots).

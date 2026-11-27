@@ -1,9 +1,11 @@
 extends Control
-## Main menu -> fight setup (fighters, CPU control, arena, corner colour, rounds) -> fight scene; plus settings.
+## Main menu -> fight setup (fighters, CPU control, arena, corner colour, rounds) -> pre-fight fighter page (if
+## either fighter has one) -> fight scene; plus settings.
 ## Choices are stored in GameState, which FightManager reads when the fight scene loads.
 
 var _home: VBoxContainer
 var _setup: PanelContainer
+var _profile: FighterProfile
 var _settings: SettingsPanel
 
 func _ready() -> void:
@@ -39,6 +41,10 @@ func _ready() -> void:
 
 	_setup = _build_setup()
 	center.add_child(_setup)
+	_profile = FighterProfile.new()
+	_profile.confirmed.connect(_start_fight)
+	_profile.closed.connect(func(): _show(_setup))
+	center.add_child(_profile)
 	_settings = SettingsPanel.new()
 	_settings.closed.connect(func(): _show(_home))
 	center.add_child(_settings)
@@ -46,7 +52,7 @@ func _ready() -> void:
 	Sfx.set_crowd(false)
 
 func _show(c: Control) -> void:
-	for n in [_home, _setup, _settings]:
+	for n in [_home, _setup, _profile, _settings]:
 		n.visible = n == c
 	for b in c.find_children("*", "Button", true, false):
 		b.grab_focus()
@@ -63,6 +69,7 @@ func _build_setup() -> PanelContainer:
 		var fnames: Array = roster.map(func(d: FighterData): return d.display_name)
 		var you := MenuKit.label("", 16, MenuKit.DIM)
 		var them := MenuKit.label("", 16, MenuKit.DIM)
+		GameState.opponent_fighter = GameState.opponent_data().id  # stays put if "Your fighter" changes
 		var pick := func(i: int, cpu: bool, info: Label):
 			var d := roster[i]
 			if cpu:
@@ -90,11 +97,25 @@ func _build_setup() -> PanelContainer:
 	var mins := [1, 2, 3]
 	v.add_child(MenuKit.row("Round length", MenuKit.option(["1 min", "2 min", "3 min"],
 			clampi(int(GameState.round_seconds / 60.0) - 1, 0, 2), func(i): GameState.round_seconds = mins[i] * 60.0)))
-	v.add_child(MenuKit.button("Start fight", func():
-		GameState.seed = -1
-		get_tree().change_scene_to_file("res://scenes/fight.tscn")))
+	v.add_child(MenuKit.button("Start fight", _show_profile_or_fight))
 	v.add_child(MenuKit.button("Back", func(): _show(_home)))
 	return p
+
+## The player's page if they have one, else the opponent's; straight to the fight if neither does.
+func _show_profile_or_fight() -> void:
+	var sides := [[GameState.player_data(), GameState.player_corner],
+			[GameState.opponent_data(), GameState.opponent_corner()]]
+	for side in sides:
+		var d: FighterData = side[0]
+		if d and d.has_profile():
+			_profile.show_fighter(d, GameState.CORNERS[side[1]].color)
+			_show(_profile)
+			return
+	_start_fight()
+
+func _start_fight() -> void:
+	GameState.seed = -1
+	get_tree().change_scene_to_file("res://scenes/fight.tscn")
 
 ## One-line tale of the tape: "#2 · "The White Lotus" · Thailand · 175 cm · 71 kg · Orthodox · CPU ★★★★★"
 func _tape(d: FighterData) -> String:
@@ -113,5 +134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if (event.is_action_pressed("pause") or event.is_action_pressed("ui_cancel")) and not _home.visible:
 		if _settings.visible:
 			_settings.closed.emit()
+		elif _profile.visible:
+			_profile.closed.emit()
 		else:
 			_show(_home)

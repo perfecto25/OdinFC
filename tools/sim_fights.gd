@@ -2,7 +2,7 @@ extends SceneTree
 ## Balance harness: runs N full-length fights and prints outcome stats.
 ##   godot --headless --path . -s tools/sim_fights.gd -- --fights=40 [--a=hard --b=easy]
 ## Controllers: random (default), easy, medium, hard, rating (the roster fighter's own difficulty).
-## --fa / --fb: roster ids for A's and B's fighter (default: neutral generic fighters), e.g. --fa=buakaw --fb=haggerty.
+## --fa / --fb: roster ids for A's and B's fighter (default: neutral generic fighters), e.g. --fa=superbon --fb=haggerty.
 ## AI controllers take the fighter's style (biases, signatures) whenever a roster fighter is given. --arena=cage fights inside the circular cage. Sides alternate each fight so the clinch initiator /
 ## fighters[0] tick order can't bias a matchup; "A" always means the --a controller.
 

@@ -32,3 +32,4 @@ func _build_enclosure() -> void:
 		for side in [[Vector3(0, y, -h), true], [Vector3(0, y, h), true], [Vector3(-h, y, 0), false], [Vector3(h, y, 0), false]]:
 			var r := _cylinder(0.028, h * 2, side[0], col, 8)
 			r.rotation_degrees = Vector3(0, 0, 90) if side[1] else Vector3(90, 0, 0)
+			r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF  # stripes across the pads and fighters

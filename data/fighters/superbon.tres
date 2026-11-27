@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FighterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/fighter_data.gd" id="1_c30dg"]
+
+[resource]
+script = ExtResource("1_c30dg")
+id = &"superbon"
+display_name = "Superbon"
+full_name = "Superbon Banchamek"
+country = "Thailand"
+fighting_out_of = "Thailand"
+age = 36
+weight_class = "Lightweight"
+height_cm = 177.8
+weight_kg = 69.76
+anim_set = "muay_thai"
+model_path = "res://assets/fighters/superbon/superbon.scn"

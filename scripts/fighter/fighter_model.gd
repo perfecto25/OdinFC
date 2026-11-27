@@ -13,6 +13,7 @@ const MIXAMO := "res://assets/mixamo/src/%s.fbx"
 const GENERATED := "res://assets/anim/generated/%s.res"
 const BLEND := 0.08        ## seconds of cross-fade between clips
 const ATTACK_BLEND := 0.04
+const HIDDEN_HAND := 0.3   ## hand bone scale, small enough that the fingers stay inside the glove
 
 ## name -> [source, start, end, impact, loop, keep_drift]. source "gen:x" = generated; impact -1 = from the
 ## clip's meta. start/end cut a section out of a longer Mixamo take (end -1 = to the end). keep_drift (optional):
@@ -24,8 +25,8 @@ const CLIPS := {
 	"jab": ["jab_cross", 0.0, 0.62, 0.40, false],
 	"cross": ["jab_cross", 0.45, 1.95, 0.63, false],
 	"lead_hook": ["hook_3", 0.0, 1.98, 0.50, false],
-	"rear_hook": ["hook_2", 0.35, 1.25, 0.90, false],
-	"uppercut": ["uppercut_jab", 0.95, 1.95, 1.40, false],
+	"rear_hook": ["gen:rear_hook", 0.0, -1.0, -1.0, false],
+	"uppercut": ["gen:uppercut", 0.0, -1.0, -1.0, false],
 	"teep": ["gen:teep", 0.0, -1.0, -1.0, false],
 	"side_kick": ["gen:side_kick", 0.0, -1.0, -1.0, false],
 	"round_kick_low": ["gen:round_kick_low", 0.0, -1.0, -1.0, false],
@@ -33,6 +34,8 @@ const CLIPS := {
 	"round_kick_high": ["gen:round_kick_high", 0.0, -1.0, -1.0, false],
 	"knee": ["gen:knee", 0.0, -1.0, -1.0, false],
 	"check": ["gen:check", 0.0, -1.0, -1.0, false],
+	"superman_punch": ["gen:superman_punch", 0.0, -1.0, -1.0, false],
+	"dash_back": ["gen:dash_back", 0.0, -1.0, -1.0, false],
 	"clinch": ["gen:clinch", 0.0, -1.0, -1.0, true],
 	"clinch_knee": ["gen:clinch_knee", 0.0, -1.0, -1.0, false],
 	"sweep": ["leg_sweep", 0.0, -1.0, 0.7, false],
@@ -61,13 +64,19 @@ const MOVE_CLIP := {&"clinch": "jab", &"clinch_knee": "clinch_knee", &"clinch_kn
 	&"clinch_knee_head": "clinch_knee"}
 
 static var _library: AnimationLibrary
+static var _sets := {}      ## anim set name -> AnimationLibrary
 static var _impacts := {}
 static var _travel := {}    ## metres per second the clip's hips travel (footwork playback-speed matching)
 
 var override_clip := ""     ## set at the end of the fight (victory / defeat)
 var skeleton: Skeleton3D
 var _ap: AnimationPlayer
-var _clip := ""
+var _character: Node3D
+var _custom := false        ## showing a fighter's own textured model
+var _color := Color.WHITE   ## corner colour
+var _clip := ""           ## logical clip name
+var _full := ""           ## the animation actually playing: "<set>/<clip>" when the fighter's set has it
+var _set := ""            ## FighterData.anim_set: clips that replace the shared ones ("" = none)
 var _move: MoveData
 var _overlay: StandardMaterial3D
 var _flash_frames := 0
@@ -87,7 +96,18 @@ var _spine_ids: Array[int] = []
 var _spine_rest: Array[Quaternion] = []  ## pose before the lean, restored before the next clip frame
 
 func setup(color: Color) -> void:
-	var ch: Node3D = load(CHARACTER).instantiate()
+	_color = color
+	_load_character(CHARACTER)
+	_weave_seed = color.h * 37.0  # the two corners weave out of phase
+
+## (Re)build the visible character: the stock mannequin or a fighter's own scene on the same skeleton.
+func _load_character(path: String) -> void:
+	if _character:
+		remove_child(_character)
+		_character.queue_free()
+	var ch: Node3D = load(path).instantiate()
+	_character = ch
+	_custom = path != CHARACTER
 	add_child(ch)
 	ch.rotation.y = PI  # Mixamo faces +Z; fighters face -Z
 	skeleton = ch.get_node("Skeleton3D")
@@ -101,11 +121,16 @@ func setup(color: Color) -> void:
 	_ap.root_node = NodePath("..")
 	_ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	_ap.add_animation_library("", library())
-	_dress(color)
+	if _set != "":
+		_ap.add_animation_library(_set, set_library(_set))
+	_dress(_color)
+	_clip = ""
+	_full = ""
 	_play("idle", 0.0)
+	_spine_rest.clear()
+	_spine_ids.clear()
 	for n in SPINE:
 		_spine_ids.append(skeleton.find_bone(n))
-	_weave_seed = color.h * 37.0  # the two corners weave out of phase
 
 ## Corner colour on the joint rings + gloves, and a hit-flash overlay on everything.
 func _dress(color: Color) -> void:
@@ -114,38 +139,60 @@ func _dress(color: Color) -> void:
 	_overlay.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_overlay.albedo_color = Color(1, 1, 1, 0)
 	for mi in skeleton.get_children():
-		if mi is MeshInstance3D:
+		if mi is MeshInstance3D and _custom:
+			mi.material_overlay = _overlay  # keep its own textures
+		elif mi is MeshInstance3D:
 			var m: StandardMaterial3D = (mi as MeshInstance3D).mesh.surface_get_material(0).duplicate()
 			if mi.name.contains("Joints"):
 				m.albedo_color = color
 			m.roughness = 0.6
 			mi.set_surface_override_material(0, m)
 			mi.material_overlay = _overlay
-	for side in ["Left", "Right"]:
-		var ba := BoneAttachment3D.new()
-		ba.bone_name = "mixamorig_%sHand" % side
-		skeleton.add_child(ba)
-		var glove := MeshInstance3D.new()
-		var s := SphereMesh.new()
-		s.radius = 0.075
-		s.height = 0.15
-		glove.mesh = s
-		glove.position = Vector3(0, 0.07, 0.02)
-		var gm := StandardMaterial3D.new()
-		gm.albedo_color = color
-		gm.roughness = 0.35
-		glove.material_override = gm
-		glove.material_overlay = _overlay
-		ba.add_child(glove)
+	for side: String in ["Left", "Right"]:
+		_add_glove(side, color)
 
-## Roster look: skin tone on the body surfaces (the joint rings and gloves keep the corner colour).
-## Shorts, hair, armbands etc. in FighterData need a real character model (art pass).
+## A boxing glove on the hand bone. The hand itself is shrunk away inside it (no clip animates scale).
+func _add_glove(side: String, color: Color) -> void:
+	var hand := skeleton.find_bone("mixamorig_%sHand" % side)
+	var rest := skeleton.get_bone_global_rest(hand).basis.orthonormalized()
+	# glove axes in the hand bone's frame: Y along the fingers, Z out of the back of the hand (up in T-pose)
+	var along := skeleton.get_bone_rest(skeleton.find_bone("mixamorig_%sHandMiddle1" % side)).origin.normalized()
+	var back := rest.inverse() * Vector3.UP
+	back = (back - along * back.dot(along)).normalized()
+	var across := along.cross(back)
+	var thumb := skeleton.get_bone_rest(skeleton.find_bone("mixamorig_%sHandThumb1" % side)).origin
+	skeleton.set_bone_pose_scale(hand, Vector3.ONE * HIDDEN_HAND)
+	var ba := BoneAttachment3D.new()
+	ba.bone_name = skeleton.get_bone_name(hand)
+	skeleton.add_child(ba)
+	var glove := MeshInstance3D.new()
+	glove.mesh = GloveMesh.build(color, signf(thumb.dot(across)))
+	glove.transform = Transform3D(Basis(across, along, back).scaled(Vector3.ONE / HIDDEN_HAND), Vector3.ZERO)
+	glove.material_overlay = _overlay
+	ba.add_child(glove)
+
+## Roster look: the fighter's own model if it has one, otherwise the mannequin with the skin tone on its
+## body surfaces (the joint rings and gloves keep the corner colour); plus the fighter's animation set.
 func apply_look(d: FighterData) -> void:
+	_set = d.anim_set
+	var path := CHARACTER
+	if d.model_path != "":
+		if ResourceLoader.exists(d.model_path):
+			path = d.model_path
+		else:
+			push_warning("missing fighter model: %s" % d.model_path)
+	_load_character(path)
+	if _custom:
+		return
 	for mi in skeleton.get_children():
 		if mi is MeshInstance3D and not mi.name.contains("Joints"):
 			var m := (mi as MeshInstance3D).get_surface_override_material(0) as StandardMaterial3D
 			if m:
 				m.albedo_color = d.skin_tone
+
+## Play the stance outside a fight (menu portraits).
+func idle_tick(delta: float) -> void:
+	_ap.advance(delta)
 
 func flash(c: Color) -> void:
 	_overlay.albedo_color = Color(c, 0.55)
@@ -178,7 +225,7 @@ func update(f: Fighter) -> void:
 				_play(_step_clip(f), 0.15)
 				# Match the stride to the actual ground speed (within reason) so feet slide less.
 				var v := Vector2(f.velocity.x, f.velocity.z).length()
-				speed = clampf(v / maxf(_travel.get(_clip, 0.5), 0.1), 0.8, 2.5)
+				speed = clampf(v / maxf(_travel.get(_full, 0.5), 0.1), 0.8, 2.5)
 			Fighter.State.GUARD, Fighter.State.SLIP:
 				_play("guard", 0.06)
 			Fighter.State.ATTACK:
@@ -234,6 +281,8 @@ func _weave_target(f: Fighter) -> Vector2:
 	var t := _weave_t + _weave_seed
 	var bob := Vector2(0.17 * sin(t * TAU * 0.55) + 0.07 * sin(t * TAU * 1.35 + 1.7),
 			0.05 + 0.05 * sin(t * TAU * 0.8 + 0.6))
+	if _set == "muay_thai":
+		bob *= 0.3  # stands tall and still behind a high guard
 	match f.state:
 		Fighter.State.SLIP:
 			var p := f.state_frame
@@ -276,7 +325,7 @@ func _apply_weave(f: Fighter) -> void:
 ## Playback speed that puts the clip's impact on the first active frame, then fits the rest of the clip
 ## into the remaining frames.
 func _warp(frame: int, startup: int, after: int) -> float:
-	var impact: float = _impacts.get(_clip, 0.0)
+	var impact: float = _impacts.get(_full, 0.0)
 	var length := _ap.current_animation_length
 	if frame <= startup:
 		return clampf(impact / (maxi(startup, 1) / 60.0), 0.2, 6.0)
@@ -293,9 +342,11 @@ func _play(name: String, blend: float, restart := false) -> void:
 	if name == _clip and not restart:
 		return
 	_clip = name
-	if restart and _ap.current_animation == name:
+	var own := _set + "/" + name
+	_full = own if _set != "" and _ap.has_animation(own) else name
+	if restart and _ap.current_animation == _full:
 		_ap.stop(true)
-	_ap.play(name, blend)
+	_ap.play(_full, blend)
 
 # --- shared clip library ---
 
@@ -326,6 +377,27 @@ static func library() -> AnimationLibrary:
 		_library.add_animation(name, anim)
 		_impacts[name] = impact
 	return _library
+
+## The clips an anim set overrides: every assets/anim/generated/<set>/<clip>.res named after a shared clip.
+static func set_library(set_name: String) -> AnimationLibrary:
+	if _sets.has(set_name):
+		return _sets[set_name]
+	var lib := AnimationLibrary.new()
+	for name: String in CLIPS:
+		var path := GENERATED % (set_name + "/" + name)
+		if not ResourceLoader.exists(path):
+			continue
+		var anim: Animation = (load(path) as Animation).duplicate(true)
+		var key := set_name + "/" + name
+		_travel[key] = anim.get_meta("travel", 0.5)
+		_impacts[key] = anim.get_meta("impact", 0.0)
+		_ground_root(anim)
+		anim.loop_mode = Animation.LOOP_LINEAR if CLIPS[name][4] else Animation.LOOP_NONE
+		lib.add_animation(name, anim)
+	if lib.get_animation_list().is_empty():
+		push_warning("anim set %s has no clips" % set_name)
+	_sets[set_name] = lib
+	return lib
 
 ## Copy [start, end] of a clip into a new clip starting at 0.
 static func _section(a: Animation, start: float, end: float) -> Animation:

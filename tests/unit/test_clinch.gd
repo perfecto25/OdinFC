@@ -140,7 +140,7 @@ func test_dominant_body_knee_lands():
 
 func test_dominant_knee_with_up_goes_to_head():
 	var c := _clinch(0.8)
-	ba.move = Vector2(0, -1)
+	ba.move = Vector2(1, 0)  # forward: a is at -x, facing b
 	ba.queue = [&"knee"]
 	_step(c, 15)
 	assert_lt(b.body.hp[MoveData.Zone.HEAD], BodyDamage.MAX_HP)
@@ -174,7 +174,7 @@ func test_framed_knee_hurts_upper_body_10_to_20_percent():
 func test_framed_head_knee_damages_body_not_head():
 	var c := _clinch(0.8)
 	bb.guard = true
-	ba.move = Vector2(0, -1)
+	ba.move = Vector2(1, 0)  # forward: a is at -x, facing b
 	ba.queue = [&"knee"]
 	_step(c, 15)
 	assert_eq(b.body.hp[MoveData.Zone.HEAD], BodyDamage.MAX_HP)
@@ -304,7 +304,7 @@ func test_knee_knockdown_ends_clinch_and_starts_count():
 	_tick(f, 12)
 	f.clinch.advantage = 0.9 if f.clinch.fighters[0] == a else -0.9
 	b.body.hp[MoveData.Zone.HEAD] = 0.5
-	ba.move = Vector2(0, -1)
+	ba.move = Vector2(1, 0)  # forward: a is at -x, facing b
 	ba.queue = [&"knee"]
 	_tick(f, 15)
 	assert_false(f.in_clinch())

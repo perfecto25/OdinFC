@@ -11,7 +11,7 @@ func _fighter() -> Fighter:
 func test_roster_loads_and_sorts_by_ranking():
 	var r := Roster.all()
 	assert_gte(r.size(), 2)
-	assert_not_null(Roster.get_fighter(&"buakaw"))
+	assert_not_null(Roster.get_fighter(&"superbon"))
 	assert_not_null(Roster.get_fighter(&"haggerty"))
 	for i in r.size() - 1:
 		if r[i].ranking > 0 and r[i + 1].ranking > 0:
@@ -27,6 +27,37 @@ func test_every_entry_is_valid():
 		assert_between(d.difficulty, 1, 5)
 		for mid in d.signatures:
 			assert_true(moves.has(mid), "%s: signature %s is not a move" % [d.id, mid])
+
+func test_superbon_profile():
+	var d := Roster.get_fighter(&"superbon")
+	assert_true(d.has_profile())
+	assert_eq(d.age, 36)
+	assert_almost_eq(d.weight_lbs(), 153.8, 0.05)
+	assert_eq(d.height_ft_in(), "5'10\"")
+
+func test_haggerty_profile():
+	var d := Roster.get_fighter(&"haggerty")
+	assert_true(d.has_profile())
+	assert_almost_eq(d.weight_lbs(), 144.0, 0.05)
+	assert_eq(d.height_ft_in(), "5'7\"")
+	assert_almost_eq(d.reach_cm / 2.54, 72.4, 0.05)
+
+func test_superbon_fights_from_the_muay_thai_set():
+	var d := Roster.get_fighter(&"superbon")
+	var lib := FighterModel.set_library(d.anim_set)
+	for clip in ["idle", "guard", "step_f", "step_b", "step_l", "step_r", "jab", "cross", "round_kick_body", "knee"]:
+		assert_true(lib.has_animation(clip), clip)
+	var m := FighterModel.new()
+	add_child_autofree(m)
+	m.setup(Color.RED)
+	m.apply_look(d)
+	assert_eq(m._full, "muay_thai/idle")
+	m._play("sweep", 0.0)
+	assert_eq(m._full, "sweep", "clips the set lacks come from the shared library")
+	m.apply_look(FighterData.new())
+	assert_eq(m._full, "idle", "no anim_set: back to the shared stance")
+	m.apply_look(Roster.get_fighter(&"haggerty"))
+	assert_eq(m._full, "muay_thai/idle")
 
 func test_neutral_data_changes_nothing():
 	var d := FighterData.new()
@@ -65,12 +96,17 @@ func test_attributes_scale_moves():
 
 func test_apply_data_sets_fighter_traits():
 	var f := _fighter()
-	var bk := Roster.get_fighter(&"buakaw")
-	f.apply_data(bk)
-	assert_eq(f.display_name, bk.display_name)
-	assert_eq(f.data, bk)
-	assert_gt(f.strength, 1.0, "Buakaw's clinch is above average")
-	assert_lt(f.chin, 1.0, "Buakaw's chin is above average")
+	var d := FighterData.new()
+	d.display_name = "Tank"
+	d.power = 75
+	d.chin = 85
+	d.cardio = 90
+	d.clinch = 85
+	f.apply_data(d)
+	assert_eq(f.display_name, d.display_name)
+	assert_eq(f.data, d)
+	assert_gt(f.strength, 1.0, "above-average clinch")
+	assert_lt(f.chin, 1.0, "above-average chin")
 	assert_gt(f.stam.regen_mult, 1.0)
 	assert_gt(f.moves[&"round_kick_body"].damage, MoveLibrary.all()[&"round_kick_body"].damage)
 	f.apply_data(null)

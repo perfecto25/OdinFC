@@ -12,6 +12,7 @@ const BODY_RADIUS := 0.3     ## fighters can't get closer than two radii (except
 const GUARD_SPEED := 1.08
 const RING_HALF := ArenaBounds.RING_HALF  ## default (ring) boundary; the arena may swap in a cage
 const BUFFER_FRAMES := 8
+const LUNGE_STOP := 0.85     ## a forward lunge pulls up this far (centre to centre) from the opponent
 const CHECK_STARTUP := 3    ## frames before the shin is up
 const CHECK_ACTIVE := 20    ## frames a leg kick gets checked
 const CHECK_RECOVERY := 12  ## leg coming down: a whiffed check is punishable
@@ -132,6 +133,16 @@ func apply_data(d: FighterData) -> void:
 	if model:
 		model.scale = Vector3.ONE * d.model_scale()
 		model.apply_look(d)
+
+## This fighter alone performs `move_id` in half the frames. Call after apply_data(); the shared
+## MoveLibrary is not modified.
+func double_move_speed(move_id: StringName) -> void:
+	var m: MoveData = (moves[move_id] as MoveData).duplicate()
+	m.startup = maxi(1, floori(m.startup / 2.0))
+	m.active = maxi(1, ceili(m.active / 2.0))
+	m.recovery = maxi(1, floori(m.recovery / 2.0))
+	moves = moves.duplicate()
+	moves[move_id] = m
 
 ## Corner colour (HUD portraits, name plates).
 func base_color() -> Color:
@@ -284,7 +295,7 @@ func _tick_attack() -> void:
 	if state_frame >= _eff_startup + _eff_active + _eff_recovery:
 		_enter(State.IDLE)
 		return
-	if attack_phase() == &"active" and not move_has_hit:
+	if attack_phase() == &"active" and not move_has_hit and current_move.action != MoveData.Action.DASH:
 		if current_move.action == MoveData.Action.CLINCH_ENTRY:
 			_try_clinch()
 		else:
@@ -359,6 +370,8 @@ func frames_until_free() -> int:
 	return 0
 
 func is_committed_to_attack() -> bool:
+	if current_move and current_move.action == MoveData.Action.DASH:
+		return false  # getting out of the way is not an opening for a counter
 	var p := attack_phase()
 	return p == &"startup" or p == &"active"
 
@@ -467,6 +480,8 @@ func _apply_movement() -> void:
 	# Own integration instead of move_and_slide(): fighters are the only moving bodies, the ring/cage edge is a
 	# clamp, and this stays deterministic no matter when tick() is called (physics step or a test).
 	velocity = Vector3(_move_input.x, 0, _move_input.y) * speed
+	if state == State.ATTACK:
+		velocity = _lunge_velocity()
 	position += velocity * FRAME
 	if opponent and state != State.CLINCH and opponent.state != State.CLINCH:
 		var d := global_position - opponent.global_position
@@ -481,6 +496,17 @@ func _apply_movement() -> void:
 		to.y = 0
 		if to.length() > 0.01:
 			rotation.y = atan2(-to.x, -to.z)
+
+## The drive of a lunging move, spread evenly over its startup and active frames.
+func _lunge_velocity() -> Vector3:
+	var frames := _eff_startup + _eff_active
+	if current_move == null or current_move.travel == 0.0 or state_frame < 1 or state_frame > frames:
+		return Vector3.ZERO
+	var step := current_move.travel * foot_speed * body.speed_factor() / frames
+	if step > 0.0 and opponent:
+		var to := opponent.global_position - global_position
+		step = minf(step, maxf(Vector2(to.x, to.z).length() - LUNGE_STOP, 0.0))
+	return -transform.basis.z * step / FRAME
 
 func _update_visuals() -> void:
 	var mat := _body.material_override as StandardMaterial3D

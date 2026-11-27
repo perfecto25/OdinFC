@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/move_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"superman_punch"
+display_name = "Superman Punch"
+animation = &"superman_punch"
+zone = 0
+strike_type = 0
+travel = 1.6
+startup = 16
+active = 5
+recovery = 20
+hit_stun = 20
+block_stun = 12
+damage = 9.0
+stamina_cost = 16.0
+reach = 1.5
+guard_break = 0.3
+parryable = true

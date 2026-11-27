@@ -2,7 +2,7 @@ extends Node
 ## Autoload "GameState": fight settings. Override from the command line, e.g.
 ##   godot --path . -- --round-seconds=30 --rest-seconds=5 --rounds=3 --seed=42 --cpu=hard --arena=cage
 ## --cpu: rating (the CPU fighter's own difficulty) | easy | medium | hard | dummy. --arena: ring | cage.
-## --p1 / --p2: roster ids (data/fighters/<id>.tres) for the player and the CPU, e.g. --p1=haggerty --p2=buakaw.
+## --p1 / --p2: roster ids (data/fighters/<id>.tres) for the player and the CPU, e.g. --p1=haggerty --p2=superbon.
 
 var rounds := 3
 var round_seconds := 180.0
@@ -21,8 +21,8 @@ const CORNERS := [
 	{"name": "Black", "color": Color(0.12, 0.12, 0.14)},
 ]
 var player_corner := 0
-var player_fighter: StringName = &""    ## roster id ("" = first in the roster)
-var opponent_fighter: StringName = &""  ## roster id ("" = second in the roster)
+var player_fighter: StringName = &"superbon"  ## roster id
+var opponent_fighter: StringName = &""        ## roster id ("" = the first fighter the player isn't using)
 var direct_launch := false  ## a --cpu/--arena/... flag was given: skip the main menu
 
 func _ready() -> void:
@@ -46,16 +46,20 @@ func opponent_corner() -> int:
 
 ## Roster entries for the two sides (null when the roster is empty: generic fighters).
 func player_data() -> FighterData:
-	return _pick(player_fighter, 0)
+	var d := Roster.get_fighter(player_fighter)
+	if d == null and not Roster.all().is_empty():
+		d = Roster.all()[0]
+	return d
 
 func opponent_data() -> FighterData:
-	return _pick(opponent_fighter, 1)
-
-func _pick(id: StringName, fallback: int) -> FighterData:
-	var d := Roster.get_fighter(id) if id != &"" else null
-	if d == null and not Roster.all().is_empty():
-		d = Roster.all()[mini(fallback, Roster.all().size() - 1)]
-	return d
+	var d := Roster.get_fighter(opponent_fighter)
+	if d:
+		return d
+	var you := player_data()
+	for other in Roster.all():
+		if other != you:
+			return other
+	return you
 
 func fight_config() -> Dictionary:
 	return {
