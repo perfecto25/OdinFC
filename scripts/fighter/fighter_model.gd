@@ -138,6 +138,15 @@ func _dress(color: Color) -> void:
 		glove.material_overlay = _overlay
 		ba.add_child(glove)
 
+## Roster look: skin tone on the body surfaces (the joint rings and gloves keep the corner colour).
+## Shorts, hair, armbands etc. in FighterData need a real character model (art pass).
+func apply_look(d: FighterData) -> void:
+	for mi in skeleton.get_children():
+		if mi is MeshInstance3D and not mi.name.contains("Joints"):
+			var m := (mi as MeshInstance3D).get_surface_override_material(0) as StandardMaterial3D
+			if m:
+				m.albedo_color = d.skin_tone
+
 func flash(c: Color) -> void:
 	_overlay.albedo_color = Color(c, 0.55)
 	_flash_frames = 6

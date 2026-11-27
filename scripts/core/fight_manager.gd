@@ -1,9 +1,10 @@
+class_name FightManager
 extends Node3D
 ## Builds the arena (ring or cage), two fighters, camera and HUD, then drives FightFlow at 60 Hz.
 
-const HELP := "WASD move | J jab  K cross  U lead hook  I rear hook  O uppercut | L teep  ; side kick  H round kick (W=high, S=low)  N knee\nSpace guard (tap = parry)  Q slip (+A/D side)  E check  C clinch | in clinch: L or walk away = escape  C pummel  N knee (+W head)  H sweep  Space frame\nTab camera | F1 opponent: %s | F2 end round (debug) | F3 arena: %s | F4 hide help | F5 debug labels"
-## F1 cycles through these: the three AI levels, then the training-dummy modes.
-const OPPONENTS := ["AI Easy", "AI Medium", "AI Hard", "Dummy IDLE", "Dummy GUARD", "Dummy PARRY_SPAM",
+const HELP := "WASD move | J jab  K cross  U lead hook  I rear hook  O uppercut | L teep  ; side kick  H round kick (W=high, S=low)  N knee\nSpace guard (tap = parry)  Q slip (+A/D side)  E check  C clinch | in clinch: L or walk away = escape  C pummel  N knee (+W head)  H sweep  Space frame\nEsc pause | Tab camera | F1 opponent: %s | F2 end round (debug) | F3 arena: %s | F4 hide help | F5 debug labels\nPad: D-pad move | face = punches, L+face = kicks/knee, R = guard (tap = parry), R+face = uppercut/check/slip/clinch | Start pause, Select camera (Settings > Controller to rebind)"
+## F1 cycles through these: the CPU fighter's own rating, the three AI levels, then the training-dummy modes.
+const OPPONENTS := ["AI Fighter rating", "AI Easy", "AI Medium", "AI Hard", "Dummy IDLE", "Dummy GUARD", "Dummy PARRY_SPAM",
 		"Dummy JAB_SPAM", "Dummy CHECK", "Dummy CLINCHER"]
 
 var flow: FightFlow
@@ -14,17 +15,23 @@ var _opponent := 1
 var _seed := 0
 var _hud: FightHud
 var _arena: Arena
+var _cam: FightCamera
+var _pause: PauseMenu
+var _hitstop := 0  ## frames the simulation is frozen for impact weight (cosmetic; sims never see it)
 
 func _ready() -> void:
 	InputSetup.register()
 	_arena = Arena.create(GameState.arena)
 	add_child(_arena)
-	var fa := _make_fighter("Red", Color(0.8, 0.15, 0.15), Vector3(-1.6, 0, 0))
-	var fb := _make_fighter("Blue", Color(0.15, 0.3, 0.85), Vector3(1.6, 0, 0))
+	var ca: Dictionary = GameState.CORNERS[GameState.player_corner]
+	var cb: Dictionary = GameState.CORNERS[GameState.opponent_corner()]
+	var fa := _make_fighter(ca.name, ca.color, Vector3(-1.6, 0, 0), GameState.player_data())
+	var fb := _make_fighter(cb.name, cb.color, Vector3(1.6, 0, 0), GameState.opponent_data())
 	fa.opponent = fb
 	fb.opponent = fa
 	var pc := PlayerController.new()
 	add_child(pc)
+	pc.pad_layout = Settings.pad_layout
 	fa.controller = pc
 	_cpu = fb
 	_dummy = DummyController.new()
@@ -34,7 +41,7 @@ func _ready() -> void:
 	var cfg := GameState.fight_config()
 	_seed = cfg.seed
 	_opponent = GameState.opponent_index if GameState.opponent_index >= 0 \
-			else {"easy": 0, "medium": 1, "hard": 2, "dummy": 3}.get(GameState.cpu, 1)
+			else {"rating": 0, "easy": 1, "medium": 2, "hard": 3, "dummy": 4}.get(GameState.cpu, 0)
 	_apply_opponent()
 	flow = FightFlow.new(fa, fb, cfg)
 	flow.fight_ended.connect(_on_fight_ended)
@@ -44,7 +51,17 @@ func _ready() -> void:
 	add_child(_hud)
 	_hud.setup(flow)
 
+	for f in [fa, fb]:
+		f.move_resolved.connect(_on_move_resolved)
+		f.attack_started.connect(func(_a, _m): Sfx.play(&"whoosh", 0.35))
+	flow.phase_changed.connect(_on_phase)
+	_on_phase(flow.phase)
+	Sfx.set_crowd(true)
+	_pause = PauseMenu.new()
+	add_child(_pause)
+
 	var cam := FightCamera.new()
+	_cam = cam
 	cam.a = fa
 	cam.b = fb
 	cam.flow = flow
@@ -54,12 +71,20 @@ func _ready() -> void:
 	print("Renderer: ", RenderingServer.get_video_adapter_name(), " | ",
 		RenderingServer.get_current_rendering_driver_name())
 
+func _exit_tree() -> void:
+	Sfx.set_crowd(false)
+
 func _physics_process(_delta: float) -> void:
-	flow.tick()
+	if _hitstop > 0:
+		_hitstop -= 1
+	else:
+		flow.tick()
 	_hud.help_text = HELP % [OPPONENTS[_opponent], GameState.arena]
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("skip"):
+	var pad_skip: bool = event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_A \
+			and (flow.phase == FightFlow.Phase.ROUND_BREAK or flow.phase == FightFlow.Phase.OVER)
+	if event.is_action_pressed("skip") or pad_skip:  # Enter / pad bottom button
 		if flow.phase == FightFlow.Phase.ROUND_BREAK:
 			flow.skip_break()
 		elif flow.phase == FightFlow.Phase.OVER:
@@ -79,18 +104,65 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("debug_end_round") and flow.phase == FightFlow.Phase.FIGHTING:
 		flow.clock = 1
 
+func _on_move_resolved(_att: Fighter, _def: Fighter, m: MoveData, res: Dictionary) -> void:
+	var kind := &"punch"
+	match m.strike_type:
+		MoveData.StrikeType.KICK, MoveData.StrikeType.TEEP: kind = &"kick"
+		MoveData.StrikeType.KNEE: kind = &"knee"
+	var stop := 0
+	var trauma := 0.0
+	match res.outcome:
+		CombatResolver.Outcome.HIT:
+			var power := clampf(res.damage / 10.0, 0.0, 1.5)
+			Sfx.play(kind, 0.6 + 0.4 * minf(power, 1.0))
+			stop = 2 + int(power * 3.0)
+			trauma = 0.12 + 0.25 * power
+			if res.counter:
+				stop += 2
+				trauma += 0.1
+			if res.knockdown:
+				stop = 10
+				trauma = 0.9
+				Sfx.play(&"knockdown")
+		CombatResolver.Outcome.BLOCK:
+			Sfx.play(&"block", 0.7)
+			stop = 1
+			trauma = 0.05
+		CombatResolver.Outcome.CHECKED:
+			Sfx.play(&"check")
+			stop = 4
+			trauma = 0.3
+		CombatResolver.Outcome.PARRY:
+			Sfx.play(&"parry", 0.6)
+			stop = 3
+	if Settings.hit_stop:
+		_hitstop = maxi(_hitstop, stop)
+	_arena.crowd_react(trauma * 0.6 + (0.5 if res.knockdown else 0.0))
+	if _cam:
+		_cam.shake_enabled = Settings.camera_shake
+		_cam.shake(trauma)
+
+func _on_phase(p: FightFlow.Phase) -> void:
+	if p == FightFlow.Phase.INTRO or p == FightFlow.Phase.ROUND_BREAK or p == FightFlow.Phase.OVER:
+		Sfx.play(&"bell", 0.9, 0.0)
+
 ## Swap the CPU's controller to OPPONENTS[_opponent]. The dummy's own mode follows the list index.
 func _apply_opponent() -> void:
 	if _ai:
 		_ai.queue_free()
 		_ai = null
-	if _opponent < 3:
-		_ai = AIController.create(_opponent as AIController.Difficulty, _seed + 1)
+	if _opponent < 4:
+		var p: AIController.Profile
+		if _opponent == 0:
+			p = AIController.Profile.for_rating(_cpu.data.difficulty if _cpu.data else 3)
+		else:
+			p = AIController.Profile.for_difficulty((_opponent - 1) as AIController.Difficulty)
+		_ai = AIController.new(p.apply_style(_cpu.data), _seed + 1)
 		_ai.me = _cpu
 		add_child(_ai)
 		_cpu.controller = _ai
 	else:
-		_dummy.mode = (_opponent - 3) as DummyController.Mode
+		_dummy.mode = (_opponent - 4) as DummyController.Mode
 		_cpu.controller = _dummy
 
 func _on_fight_ended(r: Dictionary) -> void:
@@ -99,11 +171,12 @@ func _on_fight_ended(r: Dictionary) -> void:
 		flow.other(r.winner).model.override_clip = "defeat"
 	print("Result: %s, winner %s, round %d, cards %s" % [r.method, r.winner.display_name if r.winner else "-", r.round, str(r.totals)])
 
-func _make_fighter(n: String, color: Color, pos: Vector3) -> Fighter:
+func _make_fighter(n: String, color: Color, pos: Vector3, data: FighterData) -> Fighter:
 	var f: Fighter = load("res://scenes/fighter.tscn").instantiate()
 	f.name = n
 	f.display_name = n
 	add_child(f)
 	f.setup(color, pos, true)
+	f.apply_data(data)
 	f.bounds = _arena.bounds
 	return f

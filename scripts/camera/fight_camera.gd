@@ -30,6 +30,17 @@ var _side := Vector3.BACK     ## unit vector from the fighters' midpoint toward 
 var _snap := true             ## next frame jumps instead of easing (a cut)
 var _t := 0.0
 var _shot_t := 0.0            ## seconds since the last cut
+var shake_enabled := true      ## set from Settings by FightManager
+var _trauma := 0.0            ## 0..1 camera shake, decays each frame
+
+const SHAKE_DECAY := 2.2      ## trauma lost per second
+const SHAKE_POS := 0.12       ## metres at full trauma
+const SHAKE_ROT := 0.02       ## radians at full trauma
+
+## Add impact shake (0..1). Purely cosmetic; ignored when the setting is off.
+func shake(amount: float) -> void:
+	if shake_enabled:
+		_trauma = minf(_trauma + amount, 1.0)
 
 func _ready() -> void:
 	if flow:
@@ -123,6 +134,10 @@ func _process(delta: float) -> void:
 			fov_target = 42.0
 			blend_rate = 0.0
 	pos += _sway()
+	var sh := _trauma * _trauma
+	_trauma = maxf(_trauma - SHAKE_DECAY * delta, 0.0)
+	if sh > 0.0:
+		pos += Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * SHAKE_POS * sh
 	if _snap or blend_rate <= 0.0:
 		global_position = pos
 		fov = fov_target
@@ -133,7 +148,7 @@ func _process(delta: float) -> void:
 		fov = lerpf(fov, fov_target, k)
 	if not global_position.is_equal_approx(look):
 		look_at(look)
-	rotate_object_local(Vector3.FORWARD, sin(_t * 0.9) * SWAY_ROT)
+	rotate_object_local(Vector3.FORWARD, sin(_t * 0.9) * SWAY_ROT + randf_range(-1, 1) * SHAKE_ROT * sh)
 
 ## Side-on to the fighters' line, on whichever side the camera is already on, turning at a limited rate
 ## so circling fighters make the camera orbit instead of flipping. Distance zooms to keep both framed.

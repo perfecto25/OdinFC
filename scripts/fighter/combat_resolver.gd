@@ -42,6 +42,7 @@ class Snapshot:
 	var leg_ratio := 1.0
 	var zone_hp := {MoveData.Zone.HEAD: 100.0, MoveData.Zone.BODY: 100.0, MoveData.Zone.LEGS: 100.0}
 	var cut := 0.0
+	var chin := 1.0          ## knockdown-chance multiplier for this fighter (FighterData chin)
 
 static func _result(outcome: Outcome) -> Dictionary:
 	return {"outcome": outcome, "damage": 0.0, "stamina_loss": 0.0, "stun": 0,
@@ -99,6 +100,7 @@ static func resolve(move: MoveData, att: Snapshot, def: Snapshot, rng: RandomNum
 		var chance: float = impact * impact * pow(1.0 - ratio_after, 2.0) * KD_FACTOR[move.zone]
 		if h.counter:
 			chance *= KD_COUNTER_MULT
+		chance *= def.chin
 		h.knockdown = rng.randf() < minf(chance, KD_MAX_CHANCE)
 	if move.zone == MoveData.Zone.HEAD:
 		if def.cut > 0.0:

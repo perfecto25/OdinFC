@@ -1,0 +1,46 @@
+[gd_resource type="Resource" script_class="FighterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/fighter_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"haggerty"
+display_name = "Haggerty"
+full_name = "Jonathan Haggerty"
+nickname = "The General"
+country = "England"
+gym = "Knowlesy Academy"
+record = ""
+ranking = 1
+bio = "ONE bantamweight Muay Thai and kickboxing world champion. Fast, sharp hands, step-in knees and teeps, high pressure."
+height_cm = 173.0
+reach_cm = 0.0
+weight_kg = 66.0
+stance = 0
+power = 72
+speed = 85
+chin = 65
+cardio = 75
+clinch = 65
+signatures = {
+&"cross": {
+"ai": 1.3,
+"damage": 1.1
+},
+&"knee": {
+"ai": 1.2,
+"damage": 1.15
+},
+&"rear_hook": {
+"damage": 1.1
+},
+&"teep": {
+"ai": 1.4
+}
+}
+difficulty = 4
+punch_bias = 1.3
+kick_bias = 0.9
+knee_bias = 1.0
+clinch_bias = 0.8
+preferred_range = 1.4

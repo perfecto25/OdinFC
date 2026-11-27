@@ -2,12 +2,14 @@ config_version=5
 
 [application]
 config/name="OdinFC"
-run/main_scene="res://scenes/fight.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
 
 GameState="*res://scripts/core/game_state.gd"
+Settings="*res://scripts/core/settings.gd"
+Sfx="*res://scripts/audio/sfx.gd"
 
 [display]
 window/size/viewport_width=1280

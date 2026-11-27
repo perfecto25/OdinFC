@@ -8,6 +8,54 @@ const FENCE_HEIGHT := 1.75
 const POSTS := 16
 const APRON := 0.8
 const LINK_CELL := 0.12    ## chain-link diamond size (m)
+const NEAR_ALPHA := 0.1    ## fence/post visibility on the side nearest the camera (so it never blocks the view)
+
+## Fence + posts: fades to NEAR_ALPHA on the arc facing the camera (angle measured around the cage centre).
+const FADE_SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool use_tex = true;
+uniform vec4 color : source_color = vec4(1.0);
+uniform vec2 uv_scale = vec2(1.0);
+uniform vec3 cam_pos = vec3(0.0, 0.0, 10.0);
+uniform float near_alpha = 0.1;
+uniform float metal = 0.6;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	float facing = dot(normalize(wpos.xz + vec2(0.0001)), normalize(cam_pos.xz + vec2(0.0001)));
+	float k = smoothstep(0.45, 0.8, facing);  // 1 on the arc between the camera and the cage centre
+	vec4 t = use_tex ? texture(tex, UV * uv_scale) : vec4(1.0);
+	ALBEDO = color.rgb * t.rgb;
+	ALPHA = t.a * color.a * mix(1.0, near_alpha, k);
+	METALLIC = metal;
+	ROUGHNESS = 0.5;
+}
+"""
+
+var _fade_mats: Array[ShaderMaterial] = []
+
+func _process(_d: float) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	for m in _fade_mats:
+		m.set_shader_parameter("cam_pos", cam.global_position)
+
+func _fade_material(color: Color, tex: Texture2D = null, uv_scale := Vector2.ONE) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = FADE_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("color", color)
+	m.set_shader_parameter("use_tex", tex != null)
+	if tex:
+		m.set_shader_parameter("tex", tex)
+	m.set_shader_parameter("uv_scale", uv_scale)
+	m.set_shader_parameter("near_alpha", NEAR_ALPHA)
+	_fade_mats.append(m)
+	return m
 
 func _build_enclosure() -> void:
 	bounds = ArenaBounds.cage()
@@ -31,10 +79,12 @@ func _build_enclosure() -> void:
 	var em := _mesh(edge, Vector3(0, 0.002, 0), _mat(Arena.BRAND_DARK))
 	em.scale = Vector3(1, 0.01, 1)
 	# Posts.
+	var post_mat := _fade_material(Color(0.12, 0.12, 0.13))
 	for i in POSTS:
 		var a := TAU * i / POSTS
-		_cylinder(0.045, FENCE_HEIGHT + 0.1, Vector3(cos(a) * r, (FENCE_HEIGHT + 0.1) * 0.5, sin(a) * r),
+		var post := _cylinder(0.045, FENCE_HEIGHT + 0.1, Vector3(cos(a) * r, (FENCE_HEIGHT + 0.1) * 0.5, sin(a) * r),
 				Color(0.12, 0.12, 0.13), 8)
+		post.material_override = post_mat
 	# Chain-link fence: an open cylinder with a tiled, alpha-blended diamond texture (mipmapped, so
 	# from the broadcast distance it reads as a light mesh haze instead of shimmering).
 	var fence := CylinderMesh.new()
@@ -45,15 +95,8 @@ func _build_enclosure() -> void:
 	fence.rings = 1
 	fence.cap_top = false
 	fence.cap_bottom = false
-	var fm := StandardMaterial3D.new()
-	fm.albedo_texture = _chain_link_texture()
-	fm.albedo_color = Color(0.55, 0.57, 0.6, 1.0)
-	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
-	fm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	fm.uv1_scale = Vector3(TAU * r / LINK_CELL, FENCE_HEIGHT / LINK_CELL, 1)
-	fm.metallic = 0.6
-	fm.roughness = 0.5
+	var fm := _fade_material(Color(0.55, 0.57, 0.6, 1.0), _chain_link_texture(),
+			Vector2(TAU * r / LINK_CELL, FENCE_HEIGHT / LINK_CELL))
 	var fmi := _mesh(fence, Vector3(0, FENCE_HEIGHT * 0.5, 0), fm)
 	fmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# Padded top rail and base pad.
@@ -62,13 +105,14 @@ func _build_enclosure() -> void:
 	top.outer_radius = r + 0.07
 	top.rings = 64
 	top.ring_segments = 8
-	_mesh(top, Vector3(0, FENCE_HEIGHT, 0), _mat(Color(0.04, 0.04, 0.05), 0.6))
+	_mesh(top, Vector3(0, FENCE_HEIGHT, 0), _fade_material(Color(0.04, 0.04, 0.05))).cast_shadow = \
+			GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var base := TorusMesh.new()
 	base.inner_radius = r - 0.1
 	base.outer_radius = r + 0.1
 	base.rings = 64
 	base.ring_segments = 8
-	var bm := _mesh(base, Vector3(0, 0.08, 0), _mat(Arena.BRAND_DARK, 0.6))
+	var bm := _mesh(base, Vector3(0, 0.08, 0), _fade_material(Arena.BRAND_DARK))
 	bm.scale = Vector3(1, 1.6, 1)
 
 ## One diamond cell of chain link: two diagonal wires on a transparent background.

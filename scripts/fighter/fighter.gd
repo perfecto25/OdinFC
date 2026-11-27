@@ -29,7 +29,10 @@ signal attack_started(attacker: Fighter, move: MoveData)
 signal clinch_requested(attacker: Fighter)
 
 var display_name := "Fighter"
-var strength := 1.0  ## clinch power; comes from FighterData in milestone 8b
+var strength := 1.0  ## clinch power (FighterData.clinch_strength())
+var data: FighterData  ## roster entry (null = neutral generic fighter: tests, sims)
+var foot_speed := 1.0  ## footwork multiplier from the fighter's speed
+var chin := 1.0        ## knockdown-chance multiplier when this fighter is hit (lower = tougher)
 var status_note := ""  ## short debug text shown over the fighter (set by Clinch)
 var opponent: Fighter
 var bounds := ArenaBounds.ring()  ## the ropes / cage fence; set by the arena
@@ -108,6 +111,27 @@ func setup(color: Color, pos: Vector3, with_model := false) -> void:
 	(_guard_vis.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_guard_vis.visible = false
 	show_debug_label = true
+
+## Make this fighter a roster entry: name, scaled move set, clinch strength, footwork, chin, cardio, size.
+## Call after setup(). null restores the neutral generic fighter.
+func apply_data(d: FighterData) -> void:
+	data = d
+	if d == null:
+		moves = MoveLibrary.all()
+		strength = 1.0
+		foot_speed = 1.0
+		chin = 1.0
+		stam.regen_mult = 1.0
+		return
+	display_name = d.display_name
+	moves = d.build_moves(MoveLibrary.all())
+	strength = d.clinch_strength()
+	foot_speed = d.foot_factor()
+	chin = d.chin_factor()
+	stam.regen_mult = d.regen_factor()
+	if model:
+		model.scale = Vector3.ONE * d.model_scale()
+		model.apply_look(d)
 
 ## Corner colour (HUD portraits, name plates).
 func base_color() -> Color:
@@ -311,6 +335,7 @@ func snapshot() -> CombatResolver.Snapshot:
 	s.leg_ratio = body.ratio(MoveData.Zone.LEGS)
 	s.zone_hp = body.hp
 	s.cut = body.cut
+	s.chin = chin
 	return s
 
 ## Frames until the current attack's hitbox goes live (0 while active, -1 if not attacking / past it).
@@ -436,9 +461,9 @@ func _apply_movement() -> void:
 	var speed := 0.0
 	match state:
 		State.IDLE, State.MOVE:
-			speed = SPEED * body.speed_factor()
+			speed = SPEED * foot_speed * body.speed_factor()
 		State.GUARD:
-			speed = GUARD_SPEED * body.speed_factor()
+			speed = GUARD_SPEED * foot_speed * body.speed_factor()
 	# Own integration instead of move_and_slide(): fighters are the only moving bodies, the ring/cage edge is a
 	# clamp, and this stays deterministic no matter when tick() is called (physics step or a test).
 	velocity = Vector3(_move_input.x, 0, _move_input.y) * speed

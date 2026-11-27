@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="FighterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fighter/fighter_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"buakaw"
+display_name = "Buakaw"
+full_name = "Buakaw Banchamek"
+nickname = "The White Lotus"
+country = "Thailand"
+gym = "Banchamek Gym"
+fighting_out_of = "Surin, Thailand"
+record = ""
+ranking = 2
+bio = "Two-time K-1 World MAX champion (2004, 2006). Relentless body kicks, knees and clinch work, famous conditioning."
+height_cm = 174.0
+reach_cm = 0.0
+weight_kg = 71.5
+stance = 0
+power = 75
+speed = 60
+chin = 85
+cardio = 90
+clinch = 85
+signatures = {
+&"clinch_knee_body": {
+"damage": 1.15
+},
+&"knee": {
+"ai": 1.1,
+"damage": 1.1
+},
+&"round_kick_body": {
+"ai": 2.2,
+"damage": 1.2
+}
+}
+difficulty = 5
+punch_bias = 0.8
+kick_bias = 1.3
+knee_bias = 1.0
+clinch_bias = 1.3
+preferred_range = 1.5
+skin_tone = Color(0.62, 0.42, 0.3, 1)
+hair_color = Color(0.05, 0.04, 0.04, 1)
+hair_style = "short, black, spiky on top, shorter at the sides"
+shorts_color = Color(0.08, 0.08, 0.09, 1)
+shorts_trim = Color(0.85, 0.62, 0.15, 1)
+ankle_color = Color(0.08, 0.08, 0.09, 1)
+armbands = true
+headband = true
+look_notes = "Very lean and defined, long limbs for his height, tanned skin. Black Thai shorts with gold/red trim and a sponsor waistband (often red). White rope prajioud armbands on both upper arms, black ankle supports, no shin guards. Mongkol headband for the wai kru only. Kicks from an upright stance with the rear hand held out wide (photo 3)."

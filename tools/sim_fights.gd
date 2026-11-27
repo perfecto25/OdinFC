@@ -1,7 +1,9 @@
 extends SceneTree
 ## Balance harness: runs N full-length fights and prints outcome stats.
 ##   godot --headless --path . -s tools/sim_fights.gd -- --fights=40 [--a=hard --b=easy]
-## Controllers: random (default), easy, medium, hard. --arena=cage fights inside the circular cage. Sides alternate each fight so the clinch initiator /
+## Controllers: random (default), easy, medium, hard, rating (the roster fighter's own difficulty).
+## --fa / --fb: roster ids for A's and B's fighter (default: neutral generic fighters), e.g. --fa=buakaw --fb=haggerty.
+## AI controllers take the fighter's style (biases, signatures) whenever a roster fighter is given. --arena=cage fights inside the circular cage. Sides alternate each fight so the clinch initiator /
 ## fighters[0] tick order can't bias a matchup; "A" always means the --a controller.
 
 class RandomBot extends Node:
@@ -62,6 +64,7 @@ var _cage := false
 func _run_all() -> void:
 	var n := 40
 	var kinds := ["random", "random"]
+	var datas: Array = [null, null]
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--fights="):
 			n = arg.split("=")[1].to_int()
@@ -69,6 +72,10 @@ func _run_all() -> void:
 			kinds[0] = arg.split("=")[1]
 		elif arg.begins_with("--b="):
 			kinds[1] = arg.split("=")[1]
+		elif arg.begins_with("--fa="):
+			datas[0] = Roster.get_fighter(StringName(arg.split("=")[1]))
+		elif arg.begins_with("--fb="):
+			datas[1] = Roster.get_fighter(StringName(arg.split("=")[1]))
 		elif arg.begins_with("--arena="):
 			_cage = arg.split("=")[1] == "cage"
 	var wins := [0, 0, 0]  # A, B, draw
@@ -96,8 +103,10 @@ func _run_all() -> void:
 		a.opponent = b
 		b.opponent = a
 		var swap := i % 2 == 1  # A drives fighter b on odd fights
-		var ba := _controller(kinds[1] if swap else kinds[0], i * 2 + 1)
-		var bb := _controller(kinds[0] if swap else kinds[1], i * 2 + 2)
+		a.apply_data(datas[1] if swap else datas[0])
+		b.apply_data(datas[0] if swap else datas[1])
+		var ba := _controller(kinds[1] if swap else kinds[0], i * 2 + 1, a.data)
+		var bb := _controller(kinds[0] if swap else kinds[1], i * 2 + 2, b.data)
 		if bb is RandomBot and ba is RandomBot:
 			bb.aggression = 0.4
 		root.add_child(ba)
@@ -158,7 +167,8 @@ func _run_all() -> void:
 					sources[k] = sources.get(k, 0) + ctl.debug_sources[k]
 		for node in [a, b, ba, bb]:
 			node.free()
-	print("fights: %d  (%.1fs)  A=%s vs B=%s" % [n, (Time.get_ticks_msec() - t0) / 1000.0, kinds[0], kinds[1]])
+	var names: Array = datas.map(func(d): return ("(" + d.display_name + ")") if d else "")
+	print("fights: %d  (%.1fs)  A=%s%s vs B=%s%s" % [n, (Time.get_ticks_msec() - t0) / 1000.0, kinds[0], names[0], kinds[1], names[1]])
 	print("A wins %d (%d%%)  B wins %d  draws %d   A's wins by: %s" % [wins[0], wins[0] * 100 / n, wins[1], wins[2], a_methods])
 	print("methods: ", methods)
 	print("avg rounds: %.2f  avg knockdowns/fight: %.2f  fights with a cut: %d%%  avg landed/fight: %.0f" % [
@@ -180,14 +190,13 @@ func _run_all() -> void:
 		print("AI decision sources (per fight): ", ", ".join(keys.slice(0, 20).map(func(k): return "%s %.1f" % [k, sources[k] / float(n)])))
 	quit()
 
-func _controller(kind: String, seed: int) -> Node:
-	match kind:
-		"easy":
-			return AIController.create(AIController.Difficulty.EASY, seed)
-		"medium":
-			return AIController.create(AIController.Difficulty.MEDIUM, seed)
-		"hard":
-			return AIController.create(AIController.Difficulty.HARD, seed)
+func _controller(kind: String, seed: int, data: FighterData) -> Node:
+	var levels := {"easy": AIController.Difficulty.EASY, "medium": AIController.Difficulty.MEDIUM,
+			"hard": AIController.Difficulty.HARD}
+	if kind in levels or kind == "rating":
+		var p := AIController.Profile.for_rating(data.difficulty if data else 3) if kind == "rating" \
+				else AIController.Profile.for_difficulty(levels[kind])
+		return AIController.new(p.apply_style(data), seed)
 	var r := RandomBot.new()
 	r.rng.seed = seed
 	return r

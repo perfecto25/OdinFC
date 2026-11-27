@@ -16,6 +16,7 @@ const BRAND_DARK := Color(0.05, 0.06, 0.1)
 const BRAND_GOLD := Color(0.95, 0.72, 0.2)
 
 var bounds := ArenaBounds.ring()
+var crowd: Crowd
 var camera_height := 2.3  ## broadcast cam height; the cage raises it so the shot clears the fence rail
 
 static func create(kind: String) -> Arena:
@@ -29,6 +30,7 @@ func _ready() -> void:
 	_build_crowd()
 	_build_enclosure()
 	_add_logo()
+	_build_banners()
 
 ## Subclass hook: platform, canvas, ropes or fence. Must also set `bounds`.
 func _build_enclosure() -> void:
@@ -94,7 +96,7 @@ func _build_venue() -> void:
 		_box(Vector3(ROW_DEPTH, h, half * 2), Vector3(-half - ROW_DEPTH * 0.5, y, 0), c)
 		_box(Vector3(ROW_DEPTH, h, half * 2), Vector3(half + ROW_DEPTH * 0.5, y, 0), c)
 
-## Crowd placeholders: one MultiMesh of capsules (a single draw call) with per-instance shirt colours.
+## The audience: seated people on the tiers (see Crowd), facing the ring, in random shirt colours.
 func _build_crowd() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
@@ -106,7 +108,7 @@ func _build_crowd() -> void:
 		var n := int(half * 2 / SEAT_SPACING)
 		for side in 4:
 			for i in n:
-				if rng.randf() < 0.12:
+				if rng.randf() < 0.1:
 					continue  # empty seat
 				var along := -half + (i + 0.5) * (half * 2 / n) + rng.randf_range(-0.08, 0.08)
 				var p: Vector3
@@ -115,48 +117,77 @@ func _build_crowd() -> void:
 					1: p = Vector3(along, 0, half)
 					2: p = Vector3(-half, 0, along)
 					3: p = Vector3(half, 0, along)
-				var s := rng.randf_range(0.9, 1.1)
-				p.y = seat_y + 0.55 * s
-				var basis := Basis.from_scale(Vector3(s, s, s))
+				p.y = seat_y + 0.1
+				var s := rng.randf_range(0.92, 1.08)
+				# Face the canvas centre, with a little yaw jitter.
+				var look := Vector3(-p.x, 0, -p.z).normalized().rotated(Vector3.UP, rng.randf_range(-0.3, 0.3))
+				var basis := Basis.looking_at(look, Vector3.UP).scaled(Vector3(s, s, s))
 				xforms.append(Transform3D(basis, p))
-				var shade := rng.randf_range(0.15, 0.55)
-				var tint := Color.from_hsv(rng.randf(), rng.randf_range(0.1, 0.6), shade)
-				colors.append(tint)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	var cap := CapsuleMesh.new()
-	cap.radius = 0.22
-	cap.height = 1.1
-	cap.radial_segments = 8
-	cap.rings = 2
-	mm.mesh = cap
-	mm.instance_count = xforms.size()
-	for i in xforms.size():
-		mm.set_instance_transform(i, xforms[i])
-		mm.set_instance_color(i, colors[i])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 1.0
-	mmi.material_override = mat
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
+				colors.append(Color.from_hsv(rng.randf(), rng.randf_range(0.1, 0.75), rng.randf_range(0.2, 0.7)))
+	crowd = Crowd.new()
+	add_child(crowd)
+	crowd.build(xforms, colors, rng)
 
-## Centre-canvas logo (generic branding: no real promotion or sponsor marks).
+## Cheer louder: called by the fight scene on big hits and knockdowns.
+func crowd_react(amount: float) -> void:
+	if crowd:
+		crowd.react(amount)
+
+## Centre-canvas logo: the OdinFC mark printed flat on the canvas.
 func _add_logo() -> void:
-	var l := Label3D.new()
-	l.text = "OdinFC"
-	l.font_size = 180
-	l.pixel_size = 0.006
-	l.outline_size = 0
-	l.modulate = Color(BRAND_DARK, 0.35)
-	l.rotation_degrees = Vector3(-90, 0, 0)
-	l.position = Vector3(0, 0.004, 0)
-	l.double_sided = false
-	l.shaded = true
-	add_child(l)
+	var q := QuadMesh.new()
+	q.size = Vector2(3.4, 3.4)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = Branding.logo(Color(BRAND_DARK, 0.55))
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.roughness = 1.0
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var mi := _mesh(q, Vector3(0, 0.004, 0), m)
+	mi.rotation_degrees = Vector3(-90, 0, 0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## Sponsor banners hung above the back row of the seating on all four sides: the gym's logo on a light
+## panel, black trim and a hanging bar, like a typical venue banner.
+func _build_banners() -> void:
+	var logo: Texture2D = load("res://assets/branding/elevate_logo.png")
+	var w := 13.0
+	var logo_h := (w - 1.0) * logo.get_height() / logo.get_width()
+	var h := logo_h + 1.0
+	var dist := CROWD_INNER + CROWD_ROWS * ROW_DEPTH + 0.4
+	var y := VENUE_FLOOR + CROWD_ROWS * ROW_RISE + 0.95 + h * 0.5
+	var panel_col := Color(0.94, 0.95, 0.96)
+	for side in 4:
+		var n := Node3D.new()
+		n.position = Vector3(0, y, 0)
+		n.rotation.y = side * PI * 0.5
+		add_child(n)
+		var hang := Node3D.new()  # tilted a little toward the ring, like a hung banner
+		hang.position = Vector3(0, 0, -dist)
+		hang.rotation.x = 0.2
+		n.add_child(hang)
+		var back := _quad(Vector2(w + 0.3, h + 0.3), Vector3(0, 0, -0.02), _unshaded(Color(0.03, 0.03, 0.04)))
+		var panel := _quad(Vector2(w, h), Vector3(0, 0, 0), _unshaded(panel_col))
+		var img := _quad(Vector2(w - 1.0, logo_h), Vector3(0, 0, 0.04),
+				_unshaded(Color.WHITE, logo))
+		var rod := _box(Vector3(w + 0.8, 0.12, 0.12), Vector3(0, h * 0.5 + 0.25, -0.05), Color(0.05, 0.06, 0.06))
+		for node in [back, panel, img, rod]:
+			node.get_parent().remove_child(node)
+			hang.add_child(node)
+
+func _unshaded(color: Color, tex: Texture2D = null) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = color
+	m.albedo_texture = tex
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+func _quad(size: Vector2, pos: Vector3, mat: Material) -> MeshInstance3D:
+	var q := QuadMesh.new()
+	q.size = size
+	var m := _mesh(q, pos, mat)
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return m
 
 # --- helpers for subclasses ---
 

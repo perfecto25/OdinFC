@@ -39,6 +39,36 @@ class Profile:
 	var knee_bias := 1.0
 	var clinch_bias := 1.0
 	var preferred_range := 1.45  ## where it likes to hover when not attacking (m, centre to centre)
+	var move_bias := {}          ## move id -> extra pick weight (FighterData signatures "ai")
+
+	const SKILL_FIELDS := ["reaction", "think_every", "defense", "read", "parry", "slip", "punish", "combo",
+			"counter", "aggression", "noise", "range_error", "gas", "smart", "shell"]
+
+	## Roster difficulty 1..5: 1/3/5 are the Easy/Medium/Hard presets, 2 and 4 sit halfway between.
+	static func for_rating(r: int) -> Profile:
+		r = clampi(r, 1, 5)
+		var lo := for_difficulty([Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.MEDIUM, Difficulty.HARD][r - 1])
+		if r % 2 == 1:
+			return lo
+		var hi := for_difficulty(Difficulty.MEDIUM if r == 2 else Difficulty.HARD)
+		for k in SKILL_FIELDS:
+			var v = lerpf(float(lo.get(k)), float(hi.get(k)), 0.5)
+			lo.set(k, roundi(v) if typeof(lo.get(k)) == TYPE_INT else v)
+		lo.name = "Level %d" % r
+		return lo
+
+	## Copy a roster fighter's style (biases, range, signature preferences); skill fields are untouched.
+	func apply_style(d: FighterData) -> Profile:
+		if d == null:
+			return self
+		punch_bias = d.punch_bias
+		kick_bias = d.kick_bias
+		knee_bias = d.knee_bias
+		clinch_bias = d.clinch_bias
+		preferred_range = d.preferred_range * d.reach_factor()
+		for mid in d.signatures:
+			move_bias[mid] = d.signature(mid, "ai")
+		return self
 
 	static func for_difficulty(d: Difficulty) -> Profile:
 		var p := Profile.new()
@@ -401,7 +431,7 @@ func _punish(o: Dictionary) -> StringName:
 			continue
 		ids.append(id)
 		us.append(_value(mv) - mv.stamina_cost * 0.05)
-	var pick := _softmax_pick(us)
+	var pick := _softmax_pick(us, ids)
 	return ids[pick] if pick >= 0 else &""
 
 ## Pick a strike (or a clinch entry) by utility; if the best is out of range, walk in to throw it.
@@ -435,7 +465,7 @@ func _offense(o: Dictionary) -> StringName:
 	if me.moves.has(&"clinch"):
 		ids.append(&"clinch")
 		us.append(_clinch_utility(o))
-	var pick := _softmax_pick(us)
+	var pick := _softmax_pick(us, ids)
 	if pick < 0 or us[pick] <= 0.0:
 		return &""
 	var choice := ids[pick]
@@ -495,29 +525,40 @@ static func _fastest_threat(f: Fighter, dist: float) -> int:
 ## Raw payoff of landing `mv`: scoring weight x damage, focused on whatever is already hurt.
 func _value(mv: MoveData) -> float:
 	var opp := me.opponent
+	var hurt := 1.0 - opp.body.ratio(mv.zone)
+	var focus := 1.0 + hurt * 1.5 * profile.smart
+	if mv.zone == MoveData.Zone.HEAD:
+		focus += hurt * hurt * 2.0 * profile.smart  # smell blood: go for the finish
+	return mv.damage * Judges.WEIGHT[mv.strike_type] * focus
+
+## Style prior for picking `id`: how much more (or less) often this fighter reaches for it, all else equal.
+## Applied to the softmax weight rather than the utility, so a 1.3 bias means "1.3x as often" at any
+## difficulty instead of swamping a low-noise (Hard) AI's choice.
+func _style(id: StringName) -> float:
+	var mv: MoveData = me.moves.get(id) if me else null
+	if mv == null:
+		return 1.0
 	var bias := profile.punch_bias
 	match mv.strike_type:
 		MoveData.StrikeType.KICK, MoveData.StrikeType.TEEP:
 			bias = profile.kick_bias
 		MoveData.StrikeType.KNEE:
 			bias = profile.knee_bias
-	var hurt := 1.0 - opp.body.ratio(mv.zone)
-	var focus := 1.0 + hurt * 1.5 * profile.smart
-	if mv.zone == MoveData.Zone.HEAD:
-		focus += hurt * hurt * 2.0 * profile.smart  # smell blood: go for the finish
-	return mv.damage * Judges.WEIGHT[mv.strike_type] * focus * bias
+	if mv.action == MoveData.Action.CLINCH_ENTRY:
+		bias = profile.clinch_bias
+	return maxf(0.0, bias * float(profile.move_bias.get(id, 1.0)))
 
 func _clinch_utility(o: Dictionary) -> float:
 	var opp := me.opponent
 	var mine := me.strength * (0.4 + 0.6 * me.stam.ratio())
 	var theirs := opp.strength * (0.4 + 0.6 * opp.stam.ratio())
-	var u := 2.5 * profile.clinch_bias * clampf(mine / maxf(theirs, 0.1), 0.5, 1.5)
+	var u := 2.5 * clampf(mine / maxf(theirs, 0.1), 0.5, 1.5)
 	u += 3.0 * profile.smart * _opp_guard_rate  # a shell can't stop a tie-up
 	if me.body.ratio(MoveData.Zone.HEAD) < 0.4:
 		u += 3.0 * profile.smart  # tie up to survive
 	return u
 
-func _softmax_pick(us: Array[float]) -> int:
+func _softmax_pick(us: Array[float], ids: Array[StringName] = []) -> int:
 	if us.is_empty():
 		return -1
 	var t := maxf(profile.noise, 0.01) * 4.0
@@ -526,6 +567,8 @@ func _softmax_pick(us: Array[float]) -> int:
 	var total := 0.0
 	for u in us:
 		var w := exp((u - mx) / t)
+		if ids.size() == us.size():
+			w *= _style(ids[ws.size()])
 		ws.append(w)
 		total += w
 	var r := rng.randf() * total

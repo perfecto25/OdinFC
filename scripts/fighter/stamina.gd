@@ -11,6 +11,7 @@ const MAX_SLOWDOWN := 0.4     ## startup/recovery frames x1.4 at zero stamina
 const ROUND_RECOVERY := 0.7   ## fraction of missing stamina restored between rounds
 
 var value := MAX
+var regen_mult := 1.0  ## cardio (FighterData.regen_factor())
 
 func ratio() -> float:
 	return value / MAX
@@ -26,7 +27,7 @@ func spend(amount: float) -> void:
 	value = maxf(0.0, value - amount)
 
 func regen(rate: float, body_ratio: float) -> void:
-	value = minf(MAX, value + rate * (0.4 + 0.6 * body_ratio))
+	value = minf(MAX, value + rate * regen_mult * (0.4 + 0.6 * body_ratio))
 
 func between_rounds() -> void:
 	value += (MAX - value) * ROUND_RECOVERY
